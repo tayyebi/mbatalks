@@ -1,0 +1,24 @@
+{
+  "siteUrl": "https://mbatalks.ir",
+  "title": "منابع آزمون صلاحیت حرفه‌ای مشاوران کسب و کار ۱۴۰۵",
+  "brandShort": "آزمون مشاوران کسب و کار ۱۴۰۵",
+  "wordmark": "مشاوران کسب و کار ۱۴۰۵",
+  "description": "منابع مطالعاتی آزمون صلاحیت حرفه‌ای مشاوران کسب و کار ۱۴۰۵؛ خلاصه نکته‌محور ده سرفصل آزمون کتبی به‌همراه راهنمای مرحله دوم و ارزیابی حضوری شایستگی‌ها.",
+  "locale": "fa_IR",
+  "lang": "fa",
+  "logo": "/static/img/logo.jpg",
+  "organization": "مشاوران کسب و کار",
+  "chapterOrder": [
+    "strategy",
+    "marketing",
+    "hr",
+    "finance",
+    "entrepreneurship",
+    "operations",
+    "ethics",
+    "digital",
+    "project",
+    "communication",
+    "interview"
+  ]
+}
