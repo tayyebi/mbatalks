@@ -79,7 +79,7 @@ a:hover { text-decoration-thickness: 2px; }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
 
 /* Latin terms keep Latin digits and disable the Farsi-Digits substitution. */
-.en, code, kbd, samp, .katex {
+.en, code, kbd, samp, .math {
   font-family: Vazirmatn, system-ui, sans-serif;
   direction: ltr;
   unicode-bidi: isolate;
@@ -239,11 +239,41 @@ thead th { background: var(--surface-2); font-weight: 700; white-space: nowrap; 
 tbody tr:last-child td { border-bottom: 0; }
 
 /* ---------- math ---------- */
-.katex-display {
-  direction: ltr; text-align: center;
-  margin: 0; padding: 14px 8px;
+/* Formulas are plain HTML from build/tex.py, laid out here — no KaTeX. */
+.math {
+  font-family: "Times New Roman", Times, serif;
+  font-size: 1.15rem; line-height: 1.4;
+  white-space: nowrap;
+}
+.math i { font-family: inherit; }
+.math-display {
+  display: block; text-align: center;
+  margin: 0; padding: 16px 8px;
   overflow-x: auto; overflow-y: hidden;
 }
+.math-inline { font-size: 1.05em; }
+
+.math .upr { font-style: normal; }
+.math sub, .math sup { font-size: 0.72em; line-height: 0; }
+.math .scripts {
+  display: inline-flex; flex-direction: column;
+  vertical-align: -0.35em; line-height: 1;
+}
+.math .scripts sup, .math .scripts sub { vertical-align: baseline; line-height: 1.1; }
+
+.math .frac {
+  display: inline-flex; flex-direction: column; align-items: center;
+  vertical-align: -0.55em; margin: 0 0.15em; font-size: 0.95em;
+}
+.math .frac .num { padding: 0 0.35em 0.12em; }
+.math .frac .den { padding: 0.12em 0.35em 0; border-top: 1px solid currentColor; }
+
+.math .bigop {
+  display: inline-flex; flex-direction: column; align-items: center;
+  vertical-align: -0.5em; margin: 0 0.2em;
+}
+.math .bigop .op { font-size: 1.5em; line-height: 1; }
+.math .bigop .lim { font-size: 0.6em; line-height: 1.2; }
 .formula {
   margin: 0 0 20px; padding: 4px 0 0;
   background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);

@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""Static site generator. Python standard library only — no package manager.
+
+    python3 build/build.py
+"""
+
+import json
+import re
+import shutil
+import sys
+from pathlib import Path
+from urllib.parse import urljoin
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import assets as assets_mod  # noqa: E402
+import tex  # noqa: E402
+from layout import render_page  # noqa: E402
+
+ROOT = Path(__file__).resolve().parent.parent
+DIST = ROOT / 'dist'
+CONTENT = ROOT / 'src' / 'content'
+
+META_RE = re.compile(r'^\s*<!--meta\s*(.*?)-->', re.S)
+DISPLAY_RE = re.compile(r'<div class="math">(.*?)</div>', re.S)
+INLINE_RE = re.compile(r'<span class="math-inline">(.*?)</span>', re.S)
+TAG_RE = re.compile(r'<[^>]+>')
+# Formulas are typeset from Latin metrics only; Persian belongs in the caption.
+ARABIC_RE = re.compile(r'[؀-ۿ]')
+
+warnings = []
+
+
+class BuildError(Exception):
+    pass
+
+
+def unescape_tex(s):
+    return (s.replace('&lt;', '<').replace('&gt;', '>')
+             .replace('&quot;', '"').replace('&amp;', '&'))
+
+
+def parse_fragment(raw, name):
+    m = META_RE.match(raw)
+    if not m:
+        raise BuildError(f'{name}: missing <!--meta ... --> block')
+    try:
+        meta = json.loads(m.group(1))
+    except json.JSONDecodeError as e:
+        raise BuildError(f'{name}: meta is not valid JSON — {e}') from None
+    return meta, raw[m.end():].strip()
+
+
+def render_math(html, name):
+    def one(src, display):
+        source = unescape_tex(src).strip()
+        if ARABIC_RE.search(source):
+            warnings.append(
+                f'{name}: Persian text inside a formula — move it to the caption: "{source[:40]}…"')
+        try:
+            return tex.render(source, display)
+        except ValueError as e:
+            raise BuildError(f'{name}: formula "{source[:60]}" — {e}') from None
+
+    html = DISPLAY_RE.sub(lambda m: one(m.group(1), True), html)
+    return INLINE_RE.sub(lambda m: one(m.group(1), False), html)
+
+
+def word_count(html):
+    return len(TAG_RE.sub(' ', html).split())
+
+
+def check_meta(meta, name, need_description=True):
+    if not meta.get('title'):
+        raise BuildError(f'{name}: meta.title is required')
+    if need_description:
+        if not meta.get('description'):
+            raise BuildError(f'{name}: meta.description is required')
+        n = len(meta['description'])
+        if n < 80 or n > 180:
+            warnings.append(f'{name}: description is {n} chars (aim for 120–170)')
+
+
+def load_content(site):
+    chapters = []
+    for d in sorted(p for p in CONTENT.iterdir() if p.is_dir()):
+        slug = re.sub(r'^\d+-', '', d.name)
+        meta, body = parse_fragment(
+            (d / '_chapter.html').read_text(encoding='utf-8'), f'{d.name}/_chapter.html')
+        check_meta(meta, f'{d.name}/_chapter.html')
+
+        topics = []
+        for f in sorted(p for p in d.glob('*.html') if not p.name.startswith('_')):
+            name = f'{d.name}/{f.name}'
+            tmeta, tbody = parse_fragment(f.read_text(encoding='utf-8'), name)
+            check_meta(tmeta, name)
+            tslug = tmeta.get('slug') or re.sub(r'^\d+-', '', f.stem)
+            topics.append({**tmeta, 'slug': tslug, 'url': f'/{slug}/{tslug}/',
+                           'body': tbody, 'words': word_count(tbody), 'file': name})
+
+        weight = meta.get('weight')
+        chapters.append({**meta, 'slug': slug, 'url': f'/{slug}/', 'body': body,
+                         'topics': topics,
+                         'weightLabel': meta.get('weightLabel') or (str(weight) if weight else '')})
+
+    order = site['chapterOrder']
+    chapters.sort(key=lambda c: order.index(c['slug']))
+    for i, c in enumerate(chapters):
+        c['hue'] = round(i * 360 / len(chapters))
+    return chapters
+
+
+def write_page(url, html):
+    d = DIST / url.strip('/')
+    d.mkdir(parents=True, exist_ok=True)
+    (d / 'index.html').write_text(html, encoding='utf-8')
+
+
+def main():
+    site = json.loads((ROOT / 'src' / 'site.json').read_text(encoding='utf-8'))
+    shutil.rmtree(DIST, ignore_errors=True)
+    DIST.mkdir(parents=True)
+
+    assets_mod.copy_static(ROOT, DIST)
+    asset_urls = assets_mod.emit_css(ROOT, DIST)
+    asset_urls['jsUrl'] = assets_mod.emit_js(ROOT, DIST)
+
+    chapters = load_content(site)
+
+    # Flat reading order across the whole book, for prev/next.
+    flat = []
+    for ch in chapters:
+        flat.append({'url': ch['url'], 'title': ch['title'], 'kind': 'chapter',
+                     'chapter': ch, 'ref': ch})
+        for t in ch['topics']:
+            flat.append({'url': t['url'], 'title': t['title'], 'kind': 'topic',
+                         'chapter': ch, 'ref': t})
+    by_url = {e['url']: e for e in flat}
+
+    def resolve_related(items, source):
+        out = []
+        for r in items or []:
+            url = '/' + r.strip('/') + '/'
+            hit = by_url.get(url)
+            if not hit:
+                warnings.append(f'{source}: related link "{r}" does not resolve')
+                continue
+            out.append({'url': url, 'title': hit['title']})
+        return out
+
+    pages, search_index = [], []
+    for i, entry in enumerate(flat):
+        ref, chapter, kind = entry['ref'], entry['chapter'], entry['kind']
+        source = ref.get('file') or f'{chapter["slug"]}/_chapter.html'
+        page = {
+            'kind': kind,
+            'url': entry['url'],
+            'title': ref['title'],
+            'description': ref['description'],
+            'keywords': ref.get('keywords'),
+            'chapter': chapter,
+            'html': render_math(ref['body'], source),
+            'prev': flat[i - 1] if i > 0 else None,
+            'next': flat[i + 1] if i < len(flat) - 1 else None,
+            'related': resolve_related(ref.get('related'), source),
+        }
+        if kind == 'chapter':
+            cards = ''.join(
+                f'<li data-topic="{t["url"]}"><a href="{t["url"]}">'
+                f'<b>{t["title"]}</b><span>{t["description"]}</span></a></li>'
+                for t in chapter['topics'])
+            page['html'] += f'<section class="topic-cards"><h2>مباحث این فصل</h2><ul>{cards}</ul></section>'
+        pages.append(page)
+        search_index.append({
+            'u': entry['url'], 't': ref['title'], 'd': ref['description'],
+            'k': ' '.join(ref.get('keywords') or []),
+            'c': '' if kind == 'chapter' else chapter['title'],
+        })
+
+    # Home
+    home_meta, home_body = parse_fragment(
+        (CONTENT / '_home.html').read_text(encoding='utf-8'), '_home.html')
+    check_meta(home_meta, '_home.html')
+    cards = ''.join(
+        f'<li style="--ch-hue:{c["hue"]}"><a href="{c["url"]}"><b>{c["title"]}</b>'
+        f'<span class="weight">{c["weightLabel"]}</span><span>{c["description"]}</span></a></li>'
+        for c in chapters)
+    pages.insert(0, {
+        'kind': 'home', 'url': '/', 'title': home_meta['title'],
+        'description': home_meta['description'], 'keywords': home_meta.get('keywords'),
+        'chapter': None,
+        'html': render_math(home_body, '_home.html')
+                + f'<section class="chapter-cards"><h2>سرفصل‌های آزمون</h2><ul>{cards}</ul></section>',
+        'prev': None, 'next': flat[0] if flat else None, 'related': [],
+    })
+
+    for p in pages:
+        write_page(p['url'], render_page(site, p, chapters, asset_urls))
+
+    (DIST / '404.html').write_text(render_page(site, {
+        'kind': 'plain', 'url': '/404.html', 'title': 'صفحه پیدا نشد',
+        'description': 'صفحه‌ای که دنبال آن بودید وجود ندارد.', 'keywords': None,
+        'chapter': None,
+        'html': '<p>نشانی وارد شده در این سایت وجود ندارد. از فهرست کنار صفحه یا جستجو استفاده کنید.</p>'
+                '<p><a href="/">بازگشت به صفحه اصلی</a></p>',
+        'prev': None, 'next': None, 'related': [],
+    }, chapters, asset_urls), encoding='utf-8')
+
+    (DIST / 'search-index.json').write_text(
+        json.dumps(search_index, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
+
+    def priority(u):
+        return '1.0' if u == '/' else '0.8' if u.count('/') == 2 else '0.6'
+
+    urls = ''.join(
+        f'  <url><loc>{urljoin(site["siteUrl"] + "/", p["url"])}</loc>'
+        f'<changefreq>monthly</changefreq><priority>{priority(p["url"])}</priority></url>\n'
+        for p in pages)
+    (DIST / 'sitemap.xml').write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + urls + '</urlset>\n', encoding='utf-8')
+
+    (DIST / 'robots.txt').write_text(
+        f'User-agent: *\nAllow: /\n\nSitemap: {site["siteUrl"]}/sitemap.xml\n', encoding='utf-8')
+
+    total_words = sum(t['words'] for c in chapters for t in c['topics'])
+    print(f'✓ {len(pages)} pages  ·  {len(chapters)} chapters  ·  '
+          f'{len(flat) - len(chapters)} topics')
+    print(f'  {total_words:,} words  ·  css {asset_urls["cssUrl"]}')
+    for ch in chapters:
+        w = sum(t['words'] for t in ch['topics'])
+        print(f'    {ch["slug"]:<16} {len(ch["topics"]):>2} topics  {w:>6} words')
+    if warnings:
+        print(f'\n⚠ {len(warnings)} warning(s):')
+        for w in warnings:
+            print(f'  - {w}')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except BuildError as e:
+        print(f'\n✗ build failed: {e}', file=sys.stderr)
+        sys.exit(1)

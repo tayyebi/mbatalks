@@ -7,26 +7,31 @@
 ## اجرا روی سرور
 
 ```bash
-npm ci                    # نصب katex و vazirmatn (فقط زمان ساخت لازم‌اند)
-node build/build.mjs      # تولید dist/
+python3 build/build.py    # تولید dist/
 docker compose up -d      # nginx روی پورت 9237
 ```
 
-`docker-compose.yml` پوشه `dist/` و فایل `nginx.conf` را مستقیماً داخل کانتینر nginx مانت می‌کند؛ نه Dockerfile لازم است و نه build داخل داکر. بعد از هر تغییر محتوا کافی است دوباره `node build/build.mjs` بزنید — نیازی به ری‌استارت کانتینر نیست.
+هیچ وابستگی‌ای لازم نیست: اسکریپت ساخت فقط با کتابخانه استاندارد پایتون ۳ کار می‌کند و فونت‌ها داخل `static/fonts/` در همین مخزن هستند. نه `npm` در کار است، نه `node_modules`، نه `pip`.
+
+`docker-compose.yml` پوشه `dist/` و فایل `nginx.conf` را مستقیماً داخل کانتینر nginx مانت می‌کند؛ نه Dockerfile لازم است و نه build داخل داکر. **`dist/` در گیت نیست**، پس روی سرور بعد از هر `git pull` باید `python3 build/build.py` را اجرا کنید؛ نیازی به ری‌استارت کانتینر نیست.
+
+برای مشاهده محلی: `python3 build/build.py && python3 -m http.server 9237 --directory dist`
 
 پورت ۹۲۳۷ پشت یک reverse proxy قرار می‌گیرد که TLS و دامنه `mbatalks.ir` را مدیریت می‌کند.
 
 ## ساختار
 
 ```
-build/build.mjs      تولیدکننده صفحات، sitemap، robots.txt، search-index.json
-build/layout.mjs     قالب صفحه: متاتگ‌ها، JSON-LD، سایدبار، بردکرامب، صفحه‌بندی
-build/vendor.mjs     میزبانی محلی فونت وزیرمتن و KaTeX با نام‌گذاری هش‌دار
+build/build.py       تولیدکننده صفحات، sitemap، robots.txt، search-index.json
+build/layout.py      قالب صفحه: متاتگ‌ها، JSON-LD، سایدبار، بردکرامب، صفحه‌بندی
+build/tex.py         رندر زیرمجموعه‌ای از LaTeX به HTML (جایگزین KaTeX)
+build/assets.py      باندل CSS و فونت‌ها با نام‌گذاری هش‌دار
 src/site.json        دامنه، عنوان‌ها، ترتیب فصل‌ها
 src/css/main.css     توکن‌های روشن/تیره، تایپوگرافی فارسی، اجزا، استایل چاپ
 src/js/app.js        جستجو، پوسته، منوی موبایل، علامت‌گذاری مطالعه
 src/content/         محتوا — هر فصل یک پوشه، هر مبحث یک فایل HTML
 static/img/logo.jpg  لوگو
+static/fonts/        فونت وزیرمتن (پنج فایل woff2، داخل مخزن)
 seo-keywords.txt     خوشه‌های کلیدواژه به تفکیک سرفصل
 TODO.md              وضعیت پیشرفت
 ```
@@ -55,7 +60,7 @@ TODO.md              وضعیت پیشرفت
 | | |
 |---|---|
 | اعداد | در عنوان‌ها، توضیحات و متن، عدد فارسی بنویسید (`۱۴۰۵`). فونت Farsi-Digits عددهای لاتین جامانده را هم فارسی نمایش می‌دهد، ولی گوگل متن خام را ایندکس می‌کند. |
-| فرمول‌ها | فقط انگلیسی. KaTeX متریک حروف فارسی ندارد؛ توضیح فارسی در `figcaption` بیاید. اسکریپت ساخت این مورد را بررسی و اخطار می‌دهد. |
+| فرمول‌ها | فقط انگلیسی؛ توضیح فارسی در `figcaption` بیاید. اسکریپت ساخت این مورد را بررسی و اخطار می‌دهد. `build/tex.py` تنها زیرمجموعه‌ای از LaTeX را می‌شناسد (`\frac`، `\sum`، `\mathrm`، `\text`، `\times`، زیرنویس و بالانویس)؛ هر دستور ناشناخته باعث شکست ساخت می‌شود، نه خروجی خراب. |
 | اصطلاح انگلیسی | داخل `<span class="en">` تا جهت متن و ارقام لاتین درست بماند. |
 | جدول | داخل `<div class="table-wrap">` تا در موبایل اسکرول افقی مستقل بگیرد. |
 
