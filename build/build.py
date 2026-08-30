@@ -5,6 +5,7 @@
 """
 
 import json
+import os
 import re
 import shutil
 import sys
@@ -18,7 +19,8 @@ import tex  # noqa: E402
 from layout import render_page  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-DIST = ROOT / 'dist'
+# MBA_DIST lets the container build into a writable dir while /app stays read-only.
+DIST = Path(os.environ.get('MBA_DIST') or ROOT / 'dist')
 CONTENT = ROOT / 'src' / 'content'
 
 META_RE = re.compile(r'^\s*<!--meta\s*(.*?)-->', re.S)
@@ -118,8 +120,10 @@ def write_page(url, html):
 
 def main():
     site = json.loads((ROOT / 'src' / 'site.json').read_text(encoding='utf-8'))
-    shutil.rmtree(DIST, ignore_errors=True)
-    DIST.mkdir(parents=True)
+    # Empty the output directory rather than removing it: it may be a mount point.
+    DIST.mkdir(parents=True, exist_ok=True)
+    for child in DIST.iterdir():
+        shutil.rmtree(child) if child.is_dir() else child.unlink()
 
     assets_mod.copy_static(ROOT, DIST)
     asset_urls = assets_mod.emit_css(ROOT, DIST)

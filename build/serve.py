@@ -24,7 +24,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DIST = ROOT / 'dist'
+# MBA_DIST lets the container build into a writable dir while /app stays read-only.
+DIST = Path(os.environ.get('MBA_DIST') or ROOT / 'dist')
 BUILD = ROOT / 'build' / 'build.py'
 WATCH = [ROOT / 'src', ROOT / 'static', ROOT / 'build']
 

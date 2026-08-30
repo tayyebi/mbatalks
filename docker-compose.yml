@@ -4,10 +4,16 @@ services:
     container_name: mbatalks
     working_dir: /app
     entrypoint: ["python3", "build/serve.py"]
+    # The repo is mounted read-only; the site is built into a tmpfs instead, so
+    # nothing in the working tree is ever written to by the container.
     volumes:
-      - .:/app
-    ports:
-      - "9237:80"
+      - .:/app:ro
+    tmpfs:
+      - /site
     environment:
       PORT: "80"
+      MBA_DIST: /site
+      PYTHONDONTWRITEBYTECODE: "1"
+    ports:
+      - "9237:80"
     restart: unless-stopped
