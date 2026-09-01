@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # MBA_DIST lets the container build into a writable dir while /app stays read-only.
 DIST = Path(os.environ.get('MBA_DIST') or ROOT / 'dist')
 CONTENT = ROOT / 'src' / 'content'
+QUESTIONS = ROOT / 'src' / 'questions.json'
 
 META_RE = re.compile(r'^\s*<!--meta\s*(.*?)-->', re.S)
 VOCAB_RE = re.compile(
@@ -115,6 +116,10 @@ def load_content(site):
     return chapters
 
 
+def order_index(slug, site):
+    return site['chapterOrder'].index(slug)
+
+
 def load_guides():
     """Standalone pages under _pages/ — reference material that sits outside the
     book's chapter sequence (exam guide, glossary, FAQ, question bank)."""
@@ -155,6 +160,32 @@ def glossary_html(chapters):
             '<div class="table-wrap"><table><thead><tr>'
             '<th>اصطلاح</th><th>معادل انگلیسی</th><th>در این مبحث</th>'
             f'</tr></thead><tbody>{rows}</tbody></table></div>')
+
+
+LETTERS = ('الف', 'ب', 'پ', 'ت')
+
+
+def render_questions(items, by_url, offset=0):
+    """Render a numbered question list. Each question carries a worked
+    explanation and a link back to the topic that covers it."""
+    out = []
+    for i, q in enumerate(items, start=offset + 1):
+        opts = ''.join(
+            f'<li><span class="opt-key">{LETTERS[j]}</span>{o}</li>'
+            for j, o in enumerate(q['options']))
+        topic = by_url.get('/' + q['topic'].strip('/') + '/')
+        link = (f'<a class="q-topic" href="{topic["url"]}">مطالعه مبحث: {topic["title"]}</a>'
+                if topic else '')
+        if not topic:
+            warnings.append(f'questions.json: topic "{q["topic"]}" does not resolve')
+        wrong = f'<p class="q-wrong"><b>چرا بقیه نه:</b> {q["wrong"]}</p>' if q.get('wrong') else ''
+        out.append(
+            f'<li class="q" id="q{i}"><p class="q-text">{q["q"]}</p>'
+            f'<ol class="q-options">{opts}</ol>'
+            f'<details class="q-answer"><summary>پاسخ و توضیح</summary>'
+            f'<p class="q-correct">گزینه <b>{LETTERS[q["answer"]]}</b></p>'
+            f'<p>{q["why"]}</p>{wrong}{link}</details></li>')
+    return f'<ol class="q-list">{"".join(out)}</ol>'
 
 
 def write_page(url, html):
@@ -242,6 +273,82 @@ def main():
             'u': g['url'], 't': g['title'], 'd': g['description'],
             'k': ' '.join(g.get('keywords') or []), 'c': 'راهنما',
         })
+
+    if QUESTIONS.exists():
+        bank = json.loads(QUESTIONS.read_text(encoding='utf-8'))
+        by_slug = {c['slug']: c for c in chapters}
+        made = []
+        for slug, items in bank.items():
+            ch = by_slug.get(slug)
+            if not ch:
+                warnings.append(f'questions.json: unknown chapter "{slug}"')
+                continue
+            url = f'/questions/{slug}/'
+            title = f'سؤالات {ch["title"]}'
+            desc = (f'نمونه سؤالات چهارگزینه‌ای {ch["title"]} آزمون مشاوران کسب و کار '
+                    f'با پاسخ تشریحی و پیوند به مبحث مربوطه.')
+            pages.append({
+                'kind': 'guide', 'url': url, 'title': title, 'description': desc,
+                'keywords': [f'سوالات {ch["title"]}', 'نمونه سوال آزمون مشاوران کسب و کار'],
+                'chapter': None,
+                'html': (f'<p class="lead">{len(items)} سؤال چهارگزینه‌ای از سرفصل '
+                         f'<a href="{ch["url"]}">{ch["title"]}</a>. پاسخ هر سؤال همراه با '
+                         'توضیح گزینه درست و دلیل نادرستی سایر گزینه‌ها آمده است.</p>'
+                         + render_questions(items, by_url)),
+                'prev': None, 'next': None,
+                'related': [{'url': ch['url'], 'title': ch['title']}],
+            })
+            search_index.append({'u': url, 't': title, 'd': desc,
+                                 'k': 'نمونه سوال آزمون', 'c': 'سؤالات'})
+            made.append((slug, ch, len(items)))
+
+        # Full mock paper: every question in exam order.
+        allq, blocks, offset = [], [], 0
+        for slug, ch, _ in sorted(made, key=lambda m: order_index(m[0], site)):
+            items = bank[slug]
+            blocks.append(f'<h2>{ch["title"]}</h2>' + render_questions(items, by_url, offset))
+            offset += len(items)
+            allq += items
+        if allq:
+            rows = ''.join(
+                f'<tr><td><a href="/questions/{s}/">{c["title"]}</a></td>'
+                f'<td>{n}</td></tr>' for s, c, n in
+                sorted(made, key=lambda m: order_index(m[0], site)))
+            hub_desc = (f'بانک {len(allq)} سؤال چهارگزینه‌ای آزمون صلاحیت حرفه‌ای مشاوران '
+                        'کسب و کار ۱۴۰۵ با پاسخ تشریحی، به تفکیک سرفصل.')
+            pages.append({
+                'kind': 'guide', 'url': '/questions/', 'title': 'بانک سؤالات آزمون',
+                'description': hub_desc,
+                'keywords': ['سوالات آزمون صلاحیت حرفه ای مشاوران کسب و کار',
+                             'نمونه سوال آزمون مشاوران کسب و کار', 'بانک سوالات'],
+                'chapter': None,
+                'html': (f'<p class="lead">{len(allq)} سؤال چهارگزینه‌ای با پاسخ تشریحی، '
+                         'به تفکیک سرفصل و متناسب با وزن هر سرفصل در آزمون.</p>'
+                         '<div class="table-wrap"><table><thead><tr><th>سرفصل</th>'
+                         f'<th>تعداد سؤال</th></tr></thead><tbody>{rows}'
+                         f'<tr><td><b>جمع</b></td><td><b>{len(allq)}</b></td></tr>'
+                         '</tbody></table></div>'
+                         '<p><a href="/questions/mock/">آزمون جامع — همه سؤالات یک‌جا</a></p>'),
+                'prev': None, 'next': None, 'related': [],
+            })
+            search_index.append({'u': '/questions/', 't': 'بانک سؤالات آزمون', 'd': hub_desc,
+                                 'k': 'نمونه سوال آزمون مشاوران کسب و کار', 'c': 'سؤالات'})
+            mock_desc = (f'آزمون جامع {len(allq)} سؤالی مشاوران کسب و کار ۱۴۰۵ با پاسخ '
+                         'تشریحی؛ همه سؤالات به ترتیب سرفصل در یک صفحه.')
+            pages.append({
+                'kind': 'guide', 'url': '/questions/mock/',
+                'title': f'آزمون جامع {len(allq)} سؤالی',
+                'description': mock_desc,
+                'keywords': ['آزمون جامع مشاوران کسب و کار', 'آزمون آزمایشی',
+                             'نمونه سوال آزمون مشاوران کسب و کار'],
+                'chapter': None,
+                'html': ('<p class="lead">همه سؤالات بانک، به ترتیب سرفصل. پیش از باز کردن '
+                         'پاسخ‌ها، کل آزمون را در یک نشست و با زمان‌سنج پاسخ دهید تا برآورد '
+                         'واقع‌بینانه‌ای از آمادگی خود به دست آورید.</p>' + ''.join(blocks)),
+                'prev': None, 'next': None, 'related': [],
+            })
+            search_index.append({'u': '/questions/mock/', 't': f'آزمون جامع {len(allq)} سؤالی',
+                                 'd': mock_desc, 'k': 'آزمون آزمایشی', 'c': 'سؤالات'})
 
     # Home
     home_meta, home_body = parse_fragment(

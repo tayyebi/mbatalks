@@ -289,6 +289,22 @@ tbody tr:last-child td { border-bottom: 0; }
 
 .glossary-count { color: var(--muted); font-size: 0.88rem; margin: 0 0 12px; }
 
+.q-list { list-style: none; counter-reset: q; padding: 0; margin: 0 0 24px; }
+.q { counter-increment: q; border: 1px solid var(--border); border-radius: var(--radius);
+     padding: 16px 18px; margin: 0 0 14px; background: var(--surface); }
+.q-text { margin: 0 0 12px; font-weight: 500; }
+.q-text::before { content: counter(q) ". "; color: var(--muted); font-weight: 400; }
+.q-options { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.q-options li { display: flex; gap: 8px; font-size: 0.95rem; }
+.opt-key { color: var(--muted); flex: none; min-width: 1.6em; }
+.q-answer { margin-top: 12px; border-top: 1px dashed var(--border); padding-top: 10px; }
+.q-answer summary { cursor: pointer; color: var(--brand-ink); font-size: 0.9rem; }
+.q-answer > *:not(summary) { margin: 10px 0 0; font-size: 0.93rem; }
+.q-correct { font-weight: 500; }
+.q-wrong { color: var(--muted); }
+.q-topic { display: inline-block; font-size: 0.88rem; }
+@media print { .q-answer[open] > *:not(summary) { display: block; } }
+
 /* ---------- cards ---------- */
 .chapter-cards ul, .topic-cards ul, .related ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .chapter-cards ul { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
