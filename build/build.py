@@ -24,6 +24,8 @@ DIST = Path(os.environ.get('MBA_DIST') or ROOT / 'dist')
 CONTENT = ROOT / 'src' / 'content'
 
 META_RE = re.compile(r'^\s*<!--meta\s*(.*?)-->', re.S)
+VOCAB_RE = re.compile(
+    r'<li><span class="fa">(.*?)</span><span class="en">(.*?)</span></li>', re.S)
 DISPLAY_RE = re.compile(r'<div class="math">(.*?)</div>', re.S)
 INLINE_RE = re.compile(r'<span class="math-inline">(.*?)</span>', re.S)
 TAG_RE = re.compile(r'<[^>]+>')
@@ -130,6 +132,31 @@ def load_guides():
     return out
 
 
+def glossary_html(chapters):
+    """Derive the glossary from the vocabulary lists already on the topic pages,
+    so it cannot drift out of sync with them."""
+    terms = {}
+    for ch in chapters:
+        for t in ch['topics']:
+            for fa, en in VOCAB_RE.findall(t['body']):
+                terms.setdefault(fa.strip(), {'en': en.strip(), 'seen': []})
+                terms[fa.strip()]['seen'].append(t)
+
+    # Persian collation: fold the alef variants so آ/ا/أ sort together.
+    def key(s):
+        return re.sub(r'[آأإ]', 'ا', s).replace('\u200c', ' ')
+
+    rows = ''.join(
+        f'<tr><td>{fa}</td><td><span class="en">{v["en"]}</span></td>'
+        + '<td>' + '، '.join(
+            f'<a href="{t["url"]}">{t["title"]}</a>' for t in v['seen']) + '</td></tr>'
+        for fa, v in sorted(terms.items(), key=lambda kv: key(kv[0])))
+    return (f'<p class="glossary-count">{len(terms)} اصطلاح</p>'
+            '<div class="table-wrap"><table><thead><tr>'
+            '<th>اصطلاح</th><th>معادل انگلیسی</th><th>در این مبحث</th>'
+            f'</tr></thead><tbody>{rows}</tbody></table></div>')
+
+
 def write_page(url, html):
     d = DIST / url.strip('/')
     d.mkdir(parents=True, exist_ok=True)
@@ -206,7 +233,8 @@ def main():
             'kind': 'guide', 'url': g['url'], 'title': g['title'],
             'description': g['description'], 'keywords': g.get('keywords'),
             'chapter': None,
-            'html': render_math(g['body'], g['file']),
+            'html': render_math(g['body'], g['file']).replace(
+                '<!--GLOSSARY-->', glossary_html(chapters)),
             'prev': None, 'next': None,
             'related': resolve_related(g.get('related'), g['file']),
         })
