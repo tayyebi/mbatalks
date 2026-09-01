@@ -156,13 +156,20 @@ def glossary_html(chapters):
         + '<td>' + '، '.join(
             f'<a href="{t["url"]}">{t["title"]}</a>' for t in v['seen']) + '</td></tr>'
         for fa, v in sorted(terms.items(), key=lambda kv: key(kv[0])))
-    return (f'<p class="glossary-count">{len(terms)} اصطلاح</p>'
+    return (f'<p class="glossary-count">{fa_num(len(terms))} اصطلاح</p>'
             '<div class="table-wrap"><table><thead><tr>'
             '<th>اصطلاح</th><th>معادل انگلیسی</th><th>در این مبحث</th>'
             f'</tr></thead><tbody>{rows}</tbody></table></div>')
 
 
 LETTERS = ('الف', 'ب', 'پ', 'ت')
+# Titles and descriptions are indexed as raw text, so generated numbers must be
+# Persian digits like the hand-written content.
+FA_DIGITS = str.maketrans('0123456789', '۰۱۲۳۴۵۶۷۸۹')
+
+
+def fa_num(n):
+    return str(n).translate(FA_DIGITS)
 
 
 def render_questions(items, by_url, offset=0):
@@ -291,7 +298,7 @@ def main():
                 'kind': 'guide', 'url': url, 'title': title, 'description': desc,
                 'keywords': [f'سوالات {ch["title"]}', 'نمونه سوال آزمون مشاوران کسب و کار'],
                 'chapter': None,
-                'html': (f'<p class="lead">{len(items)} سؤال چهارگزینه‌ای از سرفصل '
+                'html': (f'<p class="lead">{fa_num(len(items))} سؤال چهارگزینه‌ای از سرفصل '
                          f'<a href="{ch["url"]}">{ch["title"]}</a>. پاسخ هر سؤال همراه با '
                          'توضیح گزینه درست و دلیل نادرستی سایر گزینه‌ها آمده است.</p>'
                          + render_questions(items, by_url)),
@@ -312,9 +319,9 @@ def main():
         if allq:
             rows = ''.join(
                 f'<tr><td><a href="/questions/{s}/">{c["title"]}</a></td>'
-                f'<td>{n}</td></tr>' for s, c, n in
+                f'<td>{fa_num(n)}</td></tr>' for s, c, n in
                 sorted(made, key=lambda m: order_index(m[0], site)))
-            hub_desc = (f'بانک {len(allq)} سؤال چهارگزینه‌ای آزمون صلاحیت حرفه‌ای مشاوران '
+            hub_desc = (f'بانک {fa_num(len(allq))} سؤال چهارگزینه‌ای آزمون صلاحیت حرفه‌ای مشاوران '
                         'کسب و کار ۱۴۰۵ با پاسخ تشریحی، به تفکیک سرفصل.')
             pages.append({
                 'kind': 'guide', 'url': '/questions/', 'title': 'بانک سؤالات آزمون',
@@ -322,22 +329,22 @@ def main():
                 'keywords': ['سوالات آزمون صلاحیت حرفه ای مشاوران کسب و کار',
                              'نمونه سوال آزمون مشاوران کسب و کار', 'بانک سوالات'],
                 'chapter': None,
-                'html': (f'<p class="lead">{len(allq)} سؤال چهارگزینه‌ای با پاسخ تشریحی، '
+                'html': (f'<p class="lead">{fa_num(len(allq))} سؤال چهارگزینه‌ای با پاسخ تشریحی، '
                          'به تفکیک سرفصل و متناسب با وزن هر سرفصل در آزمون.</p>'
                          '<div class="table-wrap"><table><thead><tr><th>سرفصل</th>'
                          f'<th>تعداد سؤال</th></tr></thead><tbody>{rows}'
-                         f'<tr><td><b>جمع</b></td><td><b>{len(allq)}</b></td></tr>'
+                         f'<tr><td><b>جمع</b></td><td><b>{fa_num(len(allq))}</b></td></tr>'
                          '</tbody></table></div>'
                          '<p><a href="/questions/mock/">آزمون جامع — همه سؤالات یک‌جا</a></p>'),
                 'prev': None, 'next': None, 'related': [],
             })
             search_index.append({'u': '/questions/', 't': 'بانک سؤالات آزمون', 'd': hub_desc,
                                  'k': 'نمونه سوال آزمون مشاوران کسب و کار', 'c': 'سؤالات'})
-            mock_desc = (f'آزمون جامع {len(allq)} سؤالی مشاوران کسب و کار ۱۴۰۵ با پاسخ '
+            mock_desc = (f'آزمون جامع {fa_num(len(allq))} سؤالی مشاوران کسب و کار ۱۴۰۵ با پاسخ '
                          'تشریحی؛ همه سؤالات به ترتیب سرفصل در یک صفحه.')
             pages.append({
                 'kind': 'guide', 'url': '/questions/mock/',
-                'title': f'آزمون جامع {len(allq)} سؤالی',
+                'title': f'آزمون جامع {fa_num(len(allq))} سؤالی',
                 'description': mock_desc,
                 'keywords': ['آزمون جامع مشاوران کسب و کار', 'آزمون آزمایشی',
                              'نمونه سوال آزمون مشاوران کسب و کار'],
@@ -347,7 +354,7 @@ def main():
                          'واقع‌بینانه‌ای از آمادگی خود به دست آورید.</p>' + ''.join(blocks)),
                 'prev': None, 'next': None, 'related': [],
             })
-            search_index.append({'u': '/questions/mock/', 't': f'آزمون جامع {len(allq)} سؤالی',
+            search_index.append({'u': '/questions/mock/', 't': f'آزمون جامع {fa_num(len(allq))} سؤالی',
                                  'd': mock_desc, 'k': 'آزمون آزمایشی', 'c': 'سؤالات'})
 
     # Home
