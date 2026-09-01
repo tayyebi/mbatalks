@@ -85,7 +85,8 @@ def check_meta(meta, name, need_description=True):
 
 def load_content(site):
     chapters = []
-    for d in sorted(p for p in CONTENT.iterdir() if p.is_dir()):
+    for d in sorted(p for p in CONTENT.iterdir()
+                    if p.is_dir() and re.match(r'^\d+-', p.name)):
         slug = re.sub(r'^\d+-', '', d.name)
         meta, body = parse_fragment(
             (d / '_chapter.html').read_text(encoding='utf-8'), f'{d.name}/_chapter.html')
@@ -110,6 +111,23 @@ def load_content(site):
     for i, c in enumerate(chapters):
         c['hue'] = round(i * 360 / len(chapters))
     return chapters
+
+
+def load_guides():
+    """Standalone pages under _pages/ — reference material that sits outside the
+    book's chapter sequence (exam guide, glossary, FAQ, question bank)."""
+    d = CONTENT / '_pages'
+    if not d.is_dir():
+        return []
+    out = []
+    for f in sorted(d.glob('*.html')):
+        name = f'_pages/{f.name}'
+        meta, body = parse_fragment(f.read_text(encoding='utf-8'), name)
+        check_meta(meta, name)
+        slug = meta.get('slug') or re.sub(r'^\d+-', '', f.stem)
+        out.append({**meta, 'slug': slug, 'url': f'/{slug}/', 'body': body,
+                    'words': word_count(body), 'file': name})
+    return out
 
 
 def write_page(url, html):
@@ -139,7 +157,9 @@ def main():
         for t in ch['topics']:
             flat.append({'url': t['url'], 'title': t['title'], 'kind': 'topic',
                          'chapter': ch, 'ref': t})
+    guides = load_guides()
     by_url = {e['url']: e for e in flat}
+    by_url.update({g['url']: {'url': g['url'], 'title': g['title']} for g in guides})
 
     def resolve_related(items, source):
         out = []
@@ -181,6 +201,20 @@ def main():
             'c': '' if kind == 'chapter' else chapter['title'],
         })
 
+    for g in guides:
+        pages.append({
+            'kind': 'guide', 'url': g['url'], 'title': g['title'],
+            'description': g['description'], 'keywords': g.get('keywords'),
+            'chapter': None,
+            'html': render_math(g['body'], g['file']),
+            'prev': None, 'next': None,
+            'related': resolve_related(g.get('related'), g['file']),
+        })
+        search_index.append({
+            'u': g['url'], 't': g['title'], 'd': g['description'],
+            'k': ' '.join(g.get('keywords') or []), 'c': 'راهنما',
+        })
+
     # Home
     home_meta, home_body = parse_fragment(
         (CONTENT / '_home.html').read_text(encoding='utf-8'), '_home.html')
@@ -189,12 +223,19 @@ def main():
         f'<li style="--ch-hue:{c["hue"]}"><a href="{c["url"]}"><b>{c["title"]}</b>'
         f'<span class="weight">{c["weightLabel"]}</span><span>{c["description"]}</span></a></li>'
         for c in chapters)
+    guide_cards = ''
+    if guides:
+        gl = ''.join(
+            f'<li><a href="{g["url"]}"><b>{g["title"]}</b><span>{g["description"]}</span></a></li>'
+            for g in guides)
+        guide_cards = f'<section class="topic-cards"><h2>راهنما و منابع</h2><ul>{gl}</ul></section>'
     pages.insert(0, {
         'kind': 'home', 'url': '/', 'title': home_meta['title'],
         'description': home_meta['description'], 'keywords': home_meta.get('keywords'),
         'chapter': None,
         'html': render_math(home_body, '_home.html')
-                + f'<section class="chapter-cards"><h2>سرفصل‌های آزمون</h2><ul>{cards}</ul></section>',
+                + f'<section class="chapter-cards"><h2>سرفصل‌های آزمون</h2><ul>{cards}</ul></section>'
+                + guide_cards,
         'prev': None, 'next': flat[0] if flat else None, 'related': [],
     })
 
@@ -230,7 +271,8 @@ def main():
 
     total_words = sum(t['words'] for c in chapters for t in c['topics'])
     print(f'✓ {len(pages)} pages  ·  {len(chapters)} chapters  ·  '
-          f'{len(flat) - len(chapters)} topics')
+          f'{len(flat) - len(chapters)} topics'
+          + (f'  ·  {len(guides)} guides' if guides else ''))
     print(f'  {total_words:,} words  ·  css {asset_urls["cssUrl"]}')
     for ch in chapters:
         w = sum(t['words'] for t in ch['topics'])
