@@ -172,6 +172,21 @@ def fa_num(n):
     return str(n).translate(FA_DIGITS)
 
 
+# Persian prose reads at roughly 200 words a minute; the estimate is a hint,
+# not a promise, so it is rounded up to whole minutes.
+def reading_minutes(words):
+    return max(1, round((words or 0) / 200)) if words else None
+
+
+def chapter_progress(chapter):
+    """Static markup for the per-chapter progress block; app.js updates the
+    count and the meter from what the reader has marked as read."""
+    n = len(chapter['topics'])
+    return (f'<div class="chapter-progress" data-chapter="{chapter["url"]}" data-topics="{n}">'
+            f'<p class="chapter-progress-label">{fa_num(0)} از {fa_num(n)} مبحث خوانده شده</p>'
+            '<div class="meter" aria-hidden="true"><i></i></div></div>')
+
+
 def render_questions(items, by_url, offset=0):
     """Render a numbered question list. Each question carries a worked
     explanation and a link back to the topic that covers it."""
@@ -208,11 +223,14 @@ def main():
     for child in DIST.iterdir():
         shutil.rmtree(child) if child.is_dir() else child.unlink()
 
-    assets_mod.copy_static(ROOT, DIST)
-    asset_urls = assets_mod.emit_css(ROOT, DIST)
-    asset_urls['jsUrl'] = assets_mod.emit_js(ROOT, DIST)
-
     chapters = load_content(site)
+
+    assets_mod.copy_static(ROOT, DIST)
+    # Chapter hues ride along in the stylesheet: a style="--ch-hue:…" attribute
+    # would be dropped by the CSP, which allows no inline styles.
+    hues = ''.join(f'.ch-{c["slug"]}{{--ch-hue:{c["hue"]}}}' for c in chapters)
+    asset_urls = assets_mod.emit_css(ROOT, DIST, hues)
+    asset_urls['jsUrl'] = assets_mod.emit_js(ROOT, DIST)
 
     # Flat reading order across the whole book, for prev/next.
     flat = []
@@ -241,6 +259,9 @@ def main():
     for i, entry in enumerate(flat):
         ref, chapter, kind = entry['ref'], entry['chapter'], entry['kind']
         source = ref.get('file') or f'{chapter["slug"]}/_chapter.html'
+        position = None
+        if kind == 'topic':
+            position = (chapter['topics'].index(ref) + 1, len(chapter['topics']))
         page = {
             'kind': kind,
             'url': entry['url'],
@@ -252,12 +273,16 @@ def main():
             'prev': flat[i - 1] if i > 0 else None,
             'next': flat[i + 1] if i < len(flat) - 1 else None,
             'related': resolve_related(ref.get('related'), source),
+            'position': position,
+            'minutes': reading_minutes(ref.get('words')),
         }
         if kind == 'chapter':
             cards = ''.join(
                 f'<li data-topic="{t["url"]}"><a href="{t["url"]}">'
                 f'<b>{t["title"]}</b><span>{t["description"]}</span></a></li>'
                 for t in chapter['topics'])
+            page['html'] = page['html'].replace(
+                '<p class="chapter-progress"></p>', chapter_progress(chapter))
             page['html'] += f'<section class="topic-cards"><h2>مباحث این فصل</h2><ul>{cards}</ul></section>'
         pages.append(page)
         search_index.append({
@@ -271,6 +296,7 @@ def main():
             'kind': 'guide', 'url': g['url'], 'title': g['title'],
             'description': g['description'], 'keywords': g.get('keywords'),
             'chapter': None,
+            'minutes': reading_minutes(g['words']),
             'html': render_math(g['body'], g['file']).replace(
                 '<!--GLOSSARY-->', glossary_html(chapters)),
             'prev': None, 'next': None,
@@ -362,7 +388,7 @@ def main():
         (CONTENT / '_home.html').read_text(encoding='utf-8'), '_home.html')
     check_meta(home_meta, '_home.html')
     cards = ''.join(
-        f'<li style="--ch-hue:{c["hue"]}"><a href="{c["url"]}"><b>{c["title"]}</b>'
+        f'<li class="ch-{c["slug"]}"><a href="{c["url"]}"><b>{c["title"]}</b>'
         f'<span class="weight">{c["weightLabel"]}</span><span>{c["description"]}</span></a></li>'
         for c in chapters)
     guide_cards = ''

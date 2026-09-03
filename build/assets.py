@@ -31,7 +31,7 @@ def copy_static(root, dist):
                     ignore=shutil.ignore_patterns('fonts'))
 
 
-def emit_css(root, dist):
+def emit_css(root, dist, extra=''):
     fonts_out = dist / 'static' / 'fonts'
     css_out = dist / 'static' / 'css'
     fonts_out.mkdir(parents=True, exist_ok=True)
@@ -49,7 +49,9 @@ def emit_css(root, dist):
         )
 
     main = (root / 'src' / 'css' / 'main.css').read_text(encoding='utf-8')
-    bundle = '\n'.join(faces) + '\n' + main
+    # `extra` carries build-generated rules (chapter hues). They belong in the
+    # stylesheet because the CSP forbids inline style attributes.
+    bundle = '\n'.join(faces) + '\n' + main + '\n' + extra
     url = _emit(bundle.encode('utf-8'), css_out, 'site', '.css')
     return {'cssUrl': url, 'preloadFont': preload}
 
