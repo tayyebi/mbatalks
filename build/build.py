@@ -268,6 +268,8 @@ def main():
             'title': ref['title'],
             'description': ref['description'],
             'keywords': ref.get('keywords'),
+            'authors': ref.get('authors'),
+            'coAuthors': ref.get('coAuthors'),
             'chapter': chapter,
             'html': render_math(ref['body'], source),
             'prev': flat[i - 1] if i > 0 else None,
@@ -295,6 +297,7 @@ def main():
         pages.append({
             'kind': 'guide', 'url': g['url'], 'title': g['title'],
             'description': g['description'], 'keywords': g.get('keywords'),
+            'authors': g.get('authors'), 'coAuthors': g.get('coAuthors'),
             'chapter': None,
             'minutes': reading_minutes(g['words']),
             'html': render_math(g['body'], g['file']).replace(
@@ -400,6 +403,7 @@ def main():
     pages.insert(0, {
         'kind': 'home', 'url': '/', 'title': home_meta['title'],
         'description': home_meta['description'], 'keywords': home_meta.get('keywords'),
+        'authors': home_meta.get('authors'), 'coAuthors': home_meta.get('coAuthors'),
         'chapter': None,
         'html': render_math(home_body, '_home.html')
                 + f'<section class="chapter-cards"><h2>سرفصل‌های آزمون</h2><ul>{cards}</ul></section>'

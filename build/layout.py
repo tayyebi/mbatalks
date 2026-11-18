@@ -142,7 +142,7 @@ def structured_data(site, page):
             'logo': abs_url(site, site['logo']),
         })
     else:
-        graph.append({
+        art = {
             '@type': 'CollectionPage' if page['kind'] == 'chapter' else 'Article',
             '@id': f'{abs_url(site, page["url"])}#page',
             'url': abs_url(site, page['url']),
@@ -152,7 +152,11 @@ def structured_data(site, page):
             'inLanguage': 'fa-IR',
             'isPartOf': {'@id': f'{site["siteUrl"]}/#website'},
             'publisher': {'@id': f'{site["siteUrl"]}/#org'},
-        })
+        }
+        authors = page.get('coAuthors') or page.get('authors')
+        if authors:
+            art['author'] = [{'@type': 'Person', 'name': a} for a in authors]
+        graph.append(art)
         trail = [{'url': '/', 'title': 'خانه'}]
         if page['chapter'] and page['kind'] != 'chapter':
             trail.append(page['chapter'])
@@ -212,7 +216,12 @@ def render_page(site, page, nav, assets):
 
     keywords = ''
     if page.get('keywords'):
-        keywords = f'<meta name="keywords" content="{esc("، ".join(page["keywords"]))}">'
+        keywords = f'<meta name="keywords" content="{esc("، ".join(page["keywords"]))}">\n'
+
+    author_meta = ''
+    authors = page.get('coAuthors') or page.get('authors')
+    if authors:
+        author_meta = f'<meta name="author" content="{esc(", ".join(authors))}">\n'
 
     return f'''<!doctype html>
 <html lang="{site['lang']}" dir="rtl">
@@ -221,8 +230,7 @@ def render_page(site, page, nav, assets):
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{esc(meta_title)}</title>
 <meta name="description" content="{esc(page['description'])}">
-{keywords}
-<link rel="canonical" href="{canonical}">
+{keywords}{author_meta}<link rel="canonical" href="{canonical}">
 {rel_links}
 <meta property="og:type" content="{'article' if page['kind'] == 'topic' else 'website'}">
 <meta property="og:site_name" content="{esc(site['title'])}">
